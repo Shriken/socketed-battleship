@@ -8,6 +8,7 @@ public class Main {
 
     //variables for communication
     boolean isHost;
+    boolean local;
     ServerSocket serverSocket = null;
     Socket clientSocket = null;
     PrintWriter out = null;
@@ -28,13 +29,15 @@ public class Main {
 	stdIn = new Scanner(System.in);
 	boolean success = false;
 	while (!success) {
-	    System.out.println("host or client? ");
+	    System.out.println("local, host, or client? ");
 	    String response = stdIn.nextLine();
 	    success = true;
 	    if (response.equals("host"))
 		isHost = true;
 	    else if (response.equals("client"))
 		isHost = false;
+	    else if (response.equals("local"))
+		local = true;
 	    else
 		success = false;
 	}
@@ -66,6 +69,7 @@ public class Main {
 	    System.exit(-1);
 	} catch (IOException e) {
 	    System.err.println("Connection failed: " + e);
+	    System.exit(-1);
 	}
 
 	//at this point we are connected to our partner
