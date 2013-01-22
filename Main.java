@@ -4,9 +4,7 @@ import java.io.*;
 
 public class Main {
 
-    final String[] shipNames = {"patrol boat", "destroyer", "submarine", "battleship", "aircraft carrier"};
-
-    //variables for communication
+        //variables for communication
     boolean isHost;
     boolean local;
     ServerSocket serverSocket = null;
@@ -16,8 +14,7 @@ public class Main {
     Scanner in = null;
 
     //game variables
-    final int[] shipLens = {2,3,3,4,5};
-
+    
     Board ships;
     Board enemyShips;
 
@@ -42,34 +39,36 @@ public class Main {
 		success = false;
 	}
 	
-	try {
-	    if (isHost) {
-		//open server socket
-		System.out.print("opening server socket... ");
-		serverSocket = new ServerSocket(4444);
-		System.out.println("opened.");
-
-		//accept client socket
-		System.out.print("accepting client socket... ");
-		clientSocket = serverSocket.accept();
-		System.out.println("accepted.");
-	    } else {
-		System.out.println("Enter the host's IP address: ");
-		String ip = stdIn.nextLine();
-
-		//connect to host
-		System.out.print("connecting to host... ");
-		clientSocket = new Socket(ip, 4444);
-		System.out.println("connected");
+	if (!local) {
+	    try {
+		if (isHost) {
+		    //open server socket
+		    System.out.print("opening server socket... ");
+		    serverSocket = new ServerSocket(4444);
+		    System.out.println("opened.");
+		    
+		    //accept client socket
+		    System.out.print("accepting client socket... ");
+		    clientSocket = serverSocket.accept();
+		    System.out.println("accepted.");
+		} else {
+		    System.out.println("Enter the host's IP address: ");
+		    String ip = stdIn.nextLine();
+		    
+		    //connect to host
+		    System.out.print("connecting to host... ");
+		    clientSocket = new Socket(ip, 4444);
+		    System.out.println("connected");
+		}
+		out = new PrintWriter(clientSocket.getOutputStream(), true);
+		in = new Scanner(clientSocket.getInputStream());
+	    } catch (UnknownHostException e) {
+		System.err.println("Can't find host.");
+		System.exit(-1);
+	    } catch (IOException e) {
+		System.err.println("Connection failed: " + e);
+		System.exit(-1);
 	    }
-	    out = new PrintWriter(clientSocket.getOutputStream(), true);
-	    in = new Scanner(clientSocket.getInputStream());
-	} catch (UnknownHostException e) {
-	    System.err.println("Can't find host.");
-	    System.exit(-1);
-	} catch (IOException e) {
-	    System.err.println("Connection failed: " + e);
-	    System.exit(-1);
 	}
 
 	//at this point we are connected to our partner
@@ -80,29 +79,33 @@ public class Main {
 	    enemyShips = new Board();
 	    shipLocations = new int[2][5];
 	    shipOrients = new boolean[5];
-	    placeShips();
-	    
-	    //if you're the host, send ship locations
-	    if (isHost)
-		for (int i=0; i<5; i++)
-		    out.println(shipLocations[0][i] + " " + shipLocations[1][i] + " " + shipOrients[i]);
-	    //get other player's shipLocations
-	    for (int i=0; i<5; i++) {
-		int x = in.nextInt();
-		int y = in.nextInt();
-		boolean orient = in.nextBoolean();
-		enemyShips.addShip(x, y, new Ship(shipLens[i], orient));
-	    }
-	    in.nextLine();
 
-	    if (!isHost) {
-		for (int i=0; i<5; i++)
-		    out.println(shipLocations[0][i] + " " + shipLocations[1][i] + " " + shipOrients[i]);
+	    placeShips();
+	    if (local)
+		aiPlaceShips();
+	    else {
+		//if you're the host, send ship locations
+		if (isHost)
+		    for (int i=0; i<5; i++)
+			out.println(shipLocations[0][i] + " " + shipLocations[1][i] + " " + shipOrients[i]);
+		//get other player's shipLocations
+		for (int i=0; i<5; i++) {
+		    int x = in.nextInt();
+		    int y = in.nextInt();
+		    boolean orient = in.nextBoolean();
+		    enemyShips.addShip(x, y, orient);
+		}
+		in.nextLine();
+		
+		if (!isHost) {
+		    for (int i=0; i<5; i++)
+			out.println(shipLocations[0][i] + " " + shipLocations[1][i] + " " + shipOrients[i]);
+		}
 	    }
 
 	    //the host gets to pick who goes first
 	    boolean goesFirst = false;
-	    if (isHost) {
+	    if (isHost || local) {
 		boolean done = false;
 		while (!done) {
 		    System.out.print("Would you like to go first? (y/n) ");
@@ -114,9 +117,10 @@ public class Main {
 			goesFirst = false;
 		    else
 			done = false;
-		}		
-		//tell the other player if they go first
-		out.println(!goesFirst);
+		}
+		if (!local)
+		    //tell the other player if they go first
+		    out.println(!goesFirst);
 	    } else {
 		//if not the host, check who the host chose to go first
 		goesFirst = in.nextBoolean();
@@ -134,12 +138,19 @@ public class Main {
 
 	    endgame: //endgame breakpoint
 	    while (true) {
-		getEnemyMove();
+		//enemy turn
+		if (local)
+		    aiMove();
+		else
+		    getEnemyMove();
 		printBoard();
 		if (endgame())
 		    break endgame;
+
+		//player turn
 		takeTurn();
-		printBoard();
+		if (!local)
+		    printBoard();
 		if (endgame())
 		    break endgame;
 	    }
@@ -166,13 +177,17 @@ public class Main {
 	    }
 
 	    boolean otherPlayerPlayAgain;
-	    //inform other player of our decision
-	    if (isHost) {
-		out.println(playAgain);
-		otherPlayerPlayAgain = in.nextBoolean();
-	    } else {
-		otherPlayerPlayAgain = in.nextBoolean();
-		out.println(playAgain);
+	    if (local)
+		otherPlayerPlayAgain = true;
+	    else {
+		//inform other player of our decision
+		if (isHost) {
+		    out.println(playAgain);
+		    otherPlayerPlayAgain = in.nextBoolean();
+		} else {
+		    otherPlayerPlayAgain = in.nextBoolean();
+		    out.println(playAgain);
+		}
 	    }
 
 	    if (!playAgain) {
@@ -184,16 +199,18 @@ public class Main {
 		break quit;
 	    }
 	}
-	try {
-	    if (serverSocket != null)
-		serverSocket.close();
-	    clientSocket.close();
-	} catch (IOException e) {
-	    System.err.println("Error closing sockets.");
+	if (!local) {
+	    try {
+		if (serverSocket != null)
+		    serverSocket.close();
+		clientSocket.close();
+	    } catch (IOException e) {
+		System.err.println("Error closing sockets.");
+	    }
+	    out.close();
+	    in.close();
 	}
 	stdIn.close();
-	out.close();
-	in.close();
     }
 
     public void placeShips() {
@@ -201,13 +218,13 @@ public class Main {
 	    boolean done = false;
 	    while (!done) {
 		printBoard();
-		System.out.println("Where do you want to place your " + shipNames[i] + "? (x y) ");
-		int x = stdIn.nextInt();
-		int y = stdIn.nextInt();
+		System.out.println("Where do you want to place your " + Board.shipNames[i] + "? (x y) ");
+		int x = stdIn.nextInt()-1;
+		int y = stdIn.nextInt()-1;
 		stdIn.nextLine();
 		System.out.println("Horizontal? (y/n) ");
 		boolean orient = stdIn.nextLine().equals("y");
-		if (ships.addShip(x,y,new Ship(shipLens[i], orient))) {
+		if (ships.addShip(x,y,orient)) {
 		    done = true;
 		    shipLocations[0][i] = x;
 		    shipLocations[1][i] = y;
@@ -217,39 +234,69 @@ public class Main {
 	    }
 	}
 	printBoard();
-	System.out.println("Done. Waiting for opponent.");
-       
+	if (!local)
+	    System.out.println("Done. Waiting for opponent.");
+    }
+
+    public void aiPlaceShips() {
+	for (int i=0; i<5; i++) {
+	    boolean done = false; //done placing this ship, that is
+	    while (!done) {
+		int x = (int)(Math.random()*10);
+		int y = (int)(Math.random()*10);
+		boolean orient = Math.random() >= 0.5;
+		if (enemyShips.addShip(x,y,orient)) {
+		    done = true; //move on to next ship
+		    shipLocations[0][i] = x;
+		    shipLocations[1][i] = y;
+		    shipOrients[i] = orient;
+		} //else the loop will continue w/same ship
+	    }
+	}
     }
 
     public void takeTurn() {
 	boolean done = false;
-	int result = 0;
+	int[] result;
 	int x = 0;
 	int y = 0;
 	while (!done) {
 	    System.out.println("Where do you want to fire? (x y)");
-	    x = stdIn.nextInt();
-	    y = stdIn.nextInt();
+	    x = stdIn.nextInt()-1;
+	    y = stdIn.nextInt()-1;
 	    result = enemyShips.fire(x,y);
 
 	    //inform player of result
-	    if (result >= 0) {
+	    if (result[0] >= 0) {
 		done = true;
-		if (result == 0)
+		if (result[0] == 0)
 		    System.out.println("Miss.");
-		else if (result == 1)
+		if (result[0] >= 1)
 		    System.out.println("A hit!");
-		else
-		    System.out.println("You sunk a ship!");
-	    } else if (result == -1)
-		System.out.println("You have already shot there!");
-	    else if (result == -2)
+		if (result[0] == 2)
+		    System.out.println("You sunk my " + Board.shipNames[result[1]] + "!");
+	    } else if (result[0] == -1)
+		System.out.println("You already shot there.");
+	    else if (result[0] == -2)
 		System.out.println("Those are not valid coordinates.");
 	}
 	
-	//send shot to enemy
-	out.println(x + " " + y);
-	System.out.println("sent");
+	if (!local)
+	    //send shot to enemy
+	    out.println(x + " " + y);
+    }
+
+    public void aiMove() {
+	int[] result;
+	boolean done = false;
+	while (!done) {
+	    int x = (int)(Math.random()*10);
+	    int y = (int)(Math.random()*10);
+	    result = ships.fire(x,y);
+
+	    if (result[0] >= 0)
+		done = true;
+	}
     }
 
     public void getEnemyMove() {
@@ -257,9 +304,9 @@ public class Main {
 	int xpos = in.nextInt();
 	int ypos = in.nextInt();
 	//fire there to update board
-	int result = ships.fire(xpos, ypos);
+	int[] result = ships.fire(xpos, ypos);
 
-	if (result == 0)
+	if (result[0] == 0)
 	    System.out.println("The enemy misses.");
 	else
 	    System.out.println("The enemy hits!");

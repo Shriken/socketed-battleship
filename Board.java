@@ -4,6 +4,9 @@ public class Board {
     static final int MISS = -2;
     static final int HIT = -3;
 
+    static final String[] shipNames = {"patrol boat", "destroyer", "submarine", "battleship", "aircraft carrier"};
+    static final int[] shipLens = {2,3,3,4,5};
+
     int[][] tiles;
     int width;
 
@@ -22,9 +25,8 @@ public class Board {
 	ships = new Ship[5];
     }
 
-    public boolean addShip(int x, int y, Ship ship) {
-	x--;
-	y--;
+    public boolean addShip(int x, int y, boolean orient) {
+	Ship ship = new Ship(shipNames[shipsAlive], shipLens[shipsAlive], orient);
 
 	//if any part of the ship is off the board, fail
 	if (x < 0 || width <= x || y < 0 || width <= y)
@@ -56,34 +58,37 @@ public class Board {
 	return true;
     }
 
-    public int fire(int x, int y) {
-	//fire receives coordinates directly from the user, and must adjust
-	//them for use in the array
-	x--;
-	y--;
+    public int[] fire(int x, int y) {
+	int[] result = new int[2];
+	if (x < 0 || width <= x || y < 0 || width <= y) {
+	    result[0] = -2; //invalid shot location
+	    return result;
+	}
 
-	if (x < 0 || width <= x || y < 0 || width <= y)
-	    return -2; //
-	if (tiles[y][x] == MISS || tiles[y][x] == HIT)
-	    return -1; //already shot here
-	else if (tiles[y][x] == BLANK) {
+	if (tiles[y][x] == MISS || tiles[y][x] == HIT) {
+	    result[0] = -1; //already shot here
+	    return result;
+	} else if (tiles[y][x] == BLANK) {
 	    tiles[y][x] = MISS;
-	    return 0; //miss
+	    result[0] = 0; //miss
 	} else { //hit
 	    Ship ship = ships[tiles[y][x]];
+	    result[1] = tiles[y][x]; //save ship id for name-printing later
 	    tiles[y][x] = HIT;
 	    ship.hull[ship.orient ? x-ship.x : y-ship.y] = true;
 	    ship.goodHull--;
 	    if (ship.goodHull == 0) {
 		shipsAlive--;
 		if (shipsAlive == 0)
-		    return 3; //win
+		    result[0] = 3; //win
 		else
-		    return 2; //sunk
+		    result[0] = 2; //sunk
 	    } else {
-		return 1; //just a hit
+		result[0] = 1; //just a hit
 	    }
 	}
+
+	return result;
     }
 
     public int get(int x, int y) {
